@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer Segmentation</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h1>Customer Segmentation Analysis</h1>
+    
+    <div class="upload-box">
+        <h2>Upload Your Data</h2>
+        <form id="uploadForm" enctype="multipart/form-data">
+            <input type="file" id="fileInput" name="file" accept=".csv" required>
+            <button type="submit">Analyze</button>
+        </form>
+        <p id="message"></p>
+    </div>
+
+    <div id="results" style="display: none;">
+        <div class="chart-container">
+            <h2>Customer Segments Visualization</h2>
+            <canvas id="scatterChart"></canvas>
+        </div>
+
+        <div class="chart-container">
+            <h2>Cluster Distribution</h2>
+            <canvas id="barChart"></canvas>
+        </div>
+
+        <div class="chart-container">
+            <h2>Cluster Summary</h2>
+            <table id="summaryTable">
+                <thead>
+                    <tr>
+                        <th>Cluster</th>
+                        <th>Recency (days)</th>
+                        <th>Frequency (orders)</th>
+                        <th>Monetary ($)</th>
+                    </tr>
+                </thead>
+                <tbody id="summaryBody"></tbody>
+            </table>
+        </div>
+
+        <div class="chart-container">
+            <h2>Customer Data</h2>
+            <div style="overflow-x: auto;">
+                <table id="dataTable">
+                    <thead>
+                        <tr>
+                            <th>CustomerID</th>
+                            <th>Recency</th>
+                            <th>Frequency</th>
+                            <th>Monetary</th>
+                            <th>Cluster</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dataBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let scatterChart = null;
+        let barChart = null;
+
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const fileInput = document.getElementById('fileInput');
+            const message = document.getElementById('message');
+            const results = document.getElementById('results');
+            
+            if (!fileInput.files[0]) {
+                message.textContent = 'Please select a file';
+                message.style.color = 'red';
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            message.textContent = 'Analyzing...';
+            message.style.color = 'blue';
+
+            try {
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.error) {
+                    message.textContent = 'Error: ' + result.error;
+                    message.style.color = 'red';
+                    return;
+                }
+
+                message.textContent = 'Analysis complete!';
+                message.style.color = 'green';
+                results.style.display = 'block';
+
+                // Render charts
+                renderCharts(result.data, result.summary);
+                
+                // Render summary table
+                renderSummary(result.summary);
+                
+                // Render data table
+                renderDataTable(result.data);
+
+            } catch (error) {
+                message.textContent = 'Error: ' + error.message;
+                message.style.color = 'red';
+            }
+        });
+
+        function renderCharts(data, summary) {
+            // Scatter chart
+            const scatterCtx = document.getElementById('scatterChart').getContext('2d');
+            
+            const clusters = [...new Set(data.map(d => d.Cluster))];
+            const clusterColors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'];
+            
+            const scatterDatasets = clusters.map(cluster => ({
+                label: `Cluster ${cluster}`,
+                data: data.filter(d => d.Cluster === cluster).map(d => ({
+                    x: d.PCA1,
+                    y: d.PCA2
+                })),
+                backgroundColor: clusterColors[cluster % clusterColors.length]
+            }));
+
+            if (scatterChart) scatterChart.destroy();
+            scatterChart = new Chart(scatterCtx, {
+                type: 'scatter',
+                data: { datasets: scatterDatasets },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: { title: { display: true, text: 'PCA1' } },
+                        y: { title: { display: true, text: 'PCA2' } }
+                    }
+                }
+            });
+
+            // Bar chart
+            const barCtx = document.getElementById('barChart').getContext('2d');
+            
+            const clusterCounts = clusters.map(c => data.filter(d => d.Cluster === c).length);
+
+            if (barChart) barChart.destroy();
+            barChart = new Chart(barCtx, {
+                type: 'bar',
+                data: {
+                    labels: clusters.map(c => `Cluster ${c}`),
+                    datasets: [{
+                        label: 'Number of Customers',
+                        data: clusterCounts,
+                        backgroundColor: clusters.map(c => clusterColors[c % clusterColors.length])
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: { beginAtZero: true, title: { display: true, text: 'Count' } },
+                        x: { title: { display: true, text: 'Cluster' } }
+                    }
+                }
+            });
+        }
+
+        function renderSummary(summary) {
+            const tbody = document.getElementById('summaryBody');
+            tbody.innerHTML = '';
+
+            for (const [cluster, metrics] of Object.entries(summary)) {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>Cluster ${cluster}</td>
+                    <td>${metrics.Recency.toFixed(1)}</td>
+                    <td>${metrics.Frequency.toFixed(1)}</td>
+                    <td>$${metrics.Monetary.toFixed(2)}</td>
+                `;
+                tbody.appendChild(row);
+            }
+        }
+
+        function renderDataTable(data) {
+            const tbody = document.getElementById('dataBody');
+            tbody.innerHTML = '';
+
+            // Show first 100 rows
+            const displayData = data.slice(0, 100);
+            
+            displayData.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${row.CustomerID}</td>
+                    <td>${row.Recency}</td>
+                    <td>${row.Frequency}</td>
+                    <td>$${row.Monetary.toFixed(2)}</td>
+                    <td>${row.Cluster}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+    </script>
+</body>
+</html>
+

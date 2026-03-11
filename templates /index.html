@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<title>Customer Segmentation Dashboard</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+</head>
+
+<body class="bg-gray-100 p-10">
+
+<h1 class="text-3xl font-bold mb-6">
+Customer Segmentation using ML
+</h1>
+
+<div class="bg-white p-6 rounded shadow">
+
+<input type="file" id="file" class="mb-4">
+
+<button onclick="uploadFile()"
+class="bg-blue-500 text-white px-4 py-2 rounded">
+Run Segmentation
+</button>
+
+</div>
+
+<div class="mt-10">
+
+<canvas id="clusterChart"></canvas>
+
+</div>
+
+
+<script>
+
+async function uploadFile(){
+
+let file = document.getElementById("file").files[0]
+
+let formData = new FormData()
+
+formData.append("file",file)
+
+let res = await fetch("/analyze",{
+method:"POST",
+body:formData
+})
+
+let data = await res.json()
+
+let points = data.data
+
+let x = points.map(p=>p.PCA1)
+let y = points.map(p=>p.PCA2)
+let cluster = points.map(p=>p.Cluster)
+
+new Chart(document.getElementById("clusterChart"),{
+
+type:"scatter",
+
+data:{
+datasets:[{
+label:"Customers",
+
+data:points.map(p=>({
+x:p.PCA1,
+y:p.PCA2
+})),
+
+backgroundColor:"blue"
+
+}]
+}
+
+})
+
+}
+
+</script>
+
+</body>
+</html>
