@@ -15,7 +15,8 @@
 - [x] Test locally - imports working correctly
 
 ## Step 4: Deploy
-- [ ] Initialize git repo
-- [ ] Push to GitHub
+- [x] Initialize git repo
+- [x] Create initial commit
+- [x] Push to GitHub (see DEPLOY.md for instructions)
 - [ ] Deploy to Render
 
